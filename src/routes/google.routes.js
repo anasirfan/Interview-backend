@@ -1007,7 +1007,7 @@ router.post('/match-recording-notes', authenticate, async (req, res) => {
 // Create Google Meet link and add to calendar
 router.post('/create-meet', authenticate, async (req, res) => {
   try {
-    const { candidateId, candidateName, position, dateTime, duration, round } = req.body;
+    const { candidateId, candidateName, position, dateTime, duration, round, interviewer } = req.body;
     const logger = require('../services/logger.service');
     
     // Get admin's Google OAuth tokens
@@ -1040,9 +1040,18 @@ router.post('/create-meet', authenticate, async (req, res) => {
     const durationInMinutes = duration || 30; // Default to 30 mins
     const endDateTime = new Date(startDateTime.getTime() + durationInMinutes * 60000);
     
+    // Build attendees list: candidate + interviewer
+    const attendees = [];
+    if (candidateEmail) {
+      attendees.push({ email: candidateEmail });
+    }
+    if (interviewer) {
+      attendees.push({ email: interviewer });
+    }
+    
     const event = {
       summary: `${round} - ${candidateName}`,
-      description: `Interview for ${position} position at LIMI AI`,
+      description: `Interview for ${position} position at LIMI AI\nInterviewer: ${interviewer || 'TBD'}`,
       start: {
         dateTime: startDateTime.toISOString(),
         timeZone: 'UTC',
@@ -1051,7 +1060,7 @@ router.post('/create-meet', authenticate, async (req, res) => {
         dateTime: endDateTime.toISOString(),
         timeZone: 'UTC',
       },
-      attendees: candidateEmail ? [{ email: candidateEmail }] : [],
+      attendees: attendees,
       conferenceData: {
         createRequest: {
           requestId: `meet-${Date.now()}`,
@@ -1072,10 +1081,10 @@ router.post('/create-meet', authenticate, async (req, res) => {
       return sendError(res, 'Failed to generate Google Meet link. Ensure you have a Google Workspace account.', 500);
     }
     
-    // Update candidate with meet link and calendar event ID
+    // Update candidate with meet link, calendar event ID, and interviewer
     await run(
-      'UPDATE candidates SET meet_link = ?, calendar_event_id = ?, interview_date = ? WHERE id = ?',
-      [meetLink, calendarEvent.data.id, dateTime, candidateId]
+      'UPDATE candidates SET meet_link = ?, calendar_event_id = ?, interview_date = ?, interviewer = ? WHERE id = ?',
+      [meetLink, calendarEvent.data.id, dateTime, interviewer, candidateId]
     );
     
     logger.success('MEETING', `Google Meet created for ${candidateName}`, {
