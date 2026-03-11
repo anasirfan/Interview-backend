@@ -109,7 +109,7 @@ router.post('/:id/score', authorize('SUPER_ADMIN', 'HR_ADMIN', 'INTERVIEWER'), a
 
 router.post('/generate-email', authorize('SUPER_ADMIN', 'HR_ADMIN'), async (req, res) => {
   try {
-    const { candidateName, position, round, dateTime } = req.body;
+    const { candidateName, position, round, dateTime, duration } = req.body;
     if (!candidateName || !position) {
       sendError(res, 'candidateName and position required', 400);
       return;
@@ -119,7 +119,8 @@ router.post('/generate-email', authorize('SUPER_ADMIN', 'HR_ADMIN'), async (req,
       candidateName,
       position,
       round || 'Interview',
-      dateTime || 'TBD'
+      dateTime || 'TBD',
+      duration || 30
     );
 
     sendSuccess(res, 'Email generated', { emailBody: email });
@@ -336,7 +337,7 @@ router.get('/:id/view-cv', authenticate, async (req, res) => {
 // Generate meeting invitation email template
 router.post('/generate-meeting-email', authenticate, async (req, res) => {
   try {
-    const { candidateName, position, round, dateTime, meetLink } = req.body;
+    const { candidateName, position, round, dateTime, meetLink, duration } = req.body;
     
     const date = new Date(dateTime);
     const formattedDate = date.toLocaleDateString('en-US', { 
@@ -351,6 +352,8 @@ router.post('/generate-meeting-email', authenticate, async (req, res) => {
       hour12: true
     });
     
+    const meetingDuration = duration || 30; // Default to 30 minutes
+    
     const subject = `Interview Invitation: ${round} at LIMI AI | ${candidateName}`;
     
     const body = `Dear ${candidateName},
@@ -361,7 +364,7 @@ We are pleased to invite you to the next stage of our hiring process for the ${p
 • Round: ${round}
 • Date: ${formattedDate}
 • Time: ${formattedTime}
-• Duration: 60 minutes
+• Duration: ${meetingDuration} minutes
 • Platform: Google Meet
 
 🔗 Join the meeting:

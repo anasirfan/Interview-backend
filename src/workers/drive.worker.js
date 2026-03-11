@@ -76,6 +76,12 @@ class DriveWorker {
   async fetchDocumentText(documentLink) {
     console.log('[DriveWorker] Fetching document text...');
     
+    // Check if documentLink is valid
+    if (!documentLink || typeof documentLink !== 'string') {
+      console.error('[DriveWorker] Invalid document link:', documentLink);
+      return null;
+    }
+    
     const auth = await this.getAuthenticatedDrive();
     if (!auth) return null;
 

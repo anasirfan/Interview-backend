@@ -114,30 +114,135 @@ class CronService {
     console.log('[CronService] Checking scheduled interviews for status transition...');
     
     try {
-      // Find all SCHEDULED candidates whose interview_date has passed
-      const now = new Date().toISOString();
-      console.log(`[CronService] Current time (ISO): ${now}`);
+      const { driveWorker } = require('../workers/drive.worker');
+      const { aiProcessor } = require('../workers/ai.processor');
+      
+      // Find all SCHEDULED candidates whose interview_date has passed (at least 15 mins ago)
+      // PKT is UTC+5, so we need to add 5 hours to UTC time
+      const now = new Date();
+      const pktOffset = 5 * 60 * 60 * 1000; // 5 hours in milliseconds
+      const nowPKT = new Date(now.getTime() + pktOffset);
+      const fifteenMinutesAgo = new Date(nowPKT.getTime() - 15 * 60 * 1000).toISOString();
+      
+      console.log(`[CronService] Current time (PKT): ${nowPKT.toISOString()}`);
+      console.log(`[CronService] Checking interviews before: ${fifteenMinutesAgo}`);
       
       const scheduledCandidates = await query(`
-        SELECT id, name, interview_date, status, round_stage
+        SELECT id, name, position, interview_date, status, round_stage, meeting_recording, meeting_notes, meet_transcript
         FROM candidates 
         WHERE status = 'SCHEDULED' 
           AND interview_date IS NOT NULL 
           AND interview_date < ?
           AND is_archived = 0
-      `, [now]);
+      `, [fifteenMinutesAgo]);
 
       console.log(`[CronService] Found ${scheduledCandidates.length} SCHEDULED candidates with past interview dates`);
       if (scheduledCandidates.length > 0) {
-        console.log('[CronService] Candidates to transition:', scheduledCandidates.map(c => ({ 
+        console.log('[CronService] Candidates to process:', scheduledCandidates.map(c => ({ 
           name: c.name, 
           interview_date: c.interview_date, 
-          status: c.status 
+          has_recording: !!c.meeting_recording,
+          has_notes: !!c.meeting_notes
         })));
       }
 
+      // Scan Drive for recordings and notes
+      let driveFiles = [];
+      try {
+        driveFiles = await driveWorker.scanRecordings();
+        console.log(`[CronService] Found ${driveFiles.length} files in Google Drive`);
+      } catch (driveError) {
+        console.error('[CronService] Failed to scan Drive:', driveError.message);
+      }
+
       let transitioned = 0;
+      let recordingsMatched = 0;
+      let aiAnalyzed = 0;
+
       for (const candidate of scheduledCandidates) {
+        let hasRecording = !!candidate.meeting_recording;
+        let hasNotes = !!candidate.meeting_notes;
+        let hasTranscript = !!candidate.meet_transcript;
+
+        // Try to fetch recording and notes from Drive if missing
+        if (!hasRecording || !hasNotes) {
+          const baseTitle = `${candidate.name}`;
+          console.log(`[CronService] Searching Drive for: "${baseTitle}"`);
+          
+          const recordingFile = driveFiles.find(f => 
+            f.name.includes(baseTitle) && f.name.includes('Recording')
+          );
+          const notesFile = driveFiles.find(f => 
+            f.name.includes(baseTitle) && (f.name.includes('Notes') || f.name.includes('Transcript'))
+          );
+
+          if (recordingFile || notesFile) {
+            const updateData = {};
+            
+            if (recordingFile && !hasRecording) {
+              updateData.meeting_recording = recordingFile.webViewLink || recordingFile.webContentLink;
+              updateData.google_drive_link = recordingFile.webViewLink || recordingFile.webContentLink;
+              hasRecording = true;
+              console.log(`[CronService] Found recording for ${candidate.name}`);
+            }
+            
+            if (notesFile && !hasNotes) {
+              updateData.meeting_notes = notesFile.webViewLink || notesFile.webContentLink;
+              hasNotes = true;
+              console.log(`[CronService] Found notes for ${candidate.name}`);
+            }
+
+            if (Object.keys(updateData).length > 0) {
+              const updateFields = Object.keys(updateData).map(k => `${k} = ?`).join(', ');
+              const updateValues = Object.values(updateData);
+              
+              await run(`
+                UPDATE candidates 
+                SET ${updateFields}, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+              `, [...updateValues, candidate.id]);
+
+              recordingsMatched++;
+            }
+          }
+        }
+
+        // Generate AI analysis if notes are available
+        if (hasNotes && !candidate.ai_score) {
+          try {
+            console.log(`[CronService] Generating AI analysis for ${candidate.name}...`);
+            
+            const notesLink = candidate.meeting_notes;
+            const notesText = await driveWorker.fetchDocumentText(notesLink);
+            
+            if (notesText && notesText.length > 100) {
+              console.log(`[CronService] Fetched ${notesText.length} chars of notes`);
+              
+              const scoreResult = await aiProcessor.scoreInterview(
+                notesText,
+                hasTranscript ? candidate.meet_transcript : null
+              );
+              
+              if (scoreResult) {
+                await run(`
+                  UPDATE candidates 
+                  SET ai_score = ?,
+                      ai_feedback = ?,
+                      updated_at = CURRENT_TIMESTAMP
+                  WHERE id = ?
+                `, [scoreResult.overall_score, JSON.stringify(scoreResult), candidate.id]);
+                
+                console.log(`[CronService] AI scored ${candidate.name}: ${scoreResult.overall_score}/5`);
+                aiAnalyzed++;
+              }
+            } else {
+              console.log(`[CronService] Notes text too short or empty for ${candidate.name}`);
+            }
+          } catch (aiError) {
+            console.error(`[CronService] AI analysis failed for ${candidate.name}:`, aiError.message);
+          }
+        }
+
         // Transition to INTERVIEW status
         await run(`
           UPDATE candidates 
@@ -152,12 +257,12 @@ class CronService {
       }
 
       const duration = Date.now() - startTime;
-      const message = `Transitioned ${transitioned} candidates from SCHEDULED to INTERVIEW`;
+      const message = `Transitioned ${transitioned} candidates, matched ${recordingsMatched} recordings, analyzed ${aiAnalyzed} with AI`;
       
       await this.logCronExecution('status_transition', 'SUCCESS', duration, message);
       console.log(`[CronService] ${message} (${duration}ms)`);
       
-      return { success: true, transitioned, duration };
+      return { success: true, transitioned, recordingsMatched, aiAnalyzed, duration };
     } catch (error) {
       const duration = Date.now() - startTime;
       await this.logCronExecution('status_transition', 'ERROR', duration, 'Failed', error.message);

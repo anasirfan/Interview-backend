@@ -111,7 +111,7 @@ Return ONLY valid JSON:
     }
   }
 
-  async generateEmail(candidateName, position, round, dateTime) {
+  async generateEmail(candidateName, position, round, dateTime, duration = 30) {
     try {
       const ai = getAI();
       const prompt = `Generate a professional, warm, and concise interview invitation email. Do NOT include subject line. Return only the email body text.
@@ -120,9 +120,10 @@ Candidate: ${candidateName}
 Position: ${position}
 Interview Round: ${round}
 Date & Time: ${dateTime}
+Duration: ${duration} minutes
 Company: Limi
 
-Keep it under 150 words. Professional but friendly tone.`;
+Keep it under 150 words. Professional but friendly tone. Make sure to mention the interview duration.`;
 
       const response = await ai.models.generateContent({
         model: 'gemini-3.1-flash-lite-preview',
@@ -131,7 +132,7 @@ Keep it under 150 words. Professional but friendly tone.`;
       return response.text.trim();
     } catch (error) {
       console.error('[AiProcessor] Email generation error:', error);
-      return `Dear ${candidateName},\n\nWe would like to invite you for a ${round} interview for the ${position} position at Limi.\n\nDate & Time: ${dateTime}\n\nPlease confirm your availability.\n\nBest regards,\nLimi Recruitment Team`;
+      return `Dear ${candidateName},\n\nWe would like to invite you for a ${round} interview for the ${position} position at Limi.\n\nDate & Time: ${dateTime}\nDuration: ${duration} minutes\n\nPlease confirm your availability.\n\nBest regards,\nLimi Recruitment Team`;
     }
   }
 

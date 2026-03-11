@@ -1036,7 +1036,9 @@ router.post('/create-meet', authenticate, async (req, res) => {
     
     // Create calendar event with Google Meet
     const startDateTime = new Date(dateTime);
-    const endDateTime = new Date(startDateTime.getTime() + (duration || 60) * 60000);
+    // duration is in minutes, convert to milliseconds
+    const durationInMinutes = duration || 30; // Default to 30 mins
+    const endDateTime = new Date(startDateTime.getTime() + durationInMinutes * 60000);
     
     const event = {
       summary: `${round} - ${candidateName}`,
