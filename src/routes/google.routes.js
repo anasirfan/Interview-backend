@@ -22,7 +22,7 @@ router.get('/callback', async (req, res) => {
   try {
     const code = req.query.code;
     if (!code) {
-      res.redirect('http://localhost:3000/dashboard?google=error');
+      res.redirect('https://ims-frontend-smoky-chi.vercel.app/dashboard?google=error');
       return;
     }
 
@@ -42,10 +42,10 @@ router.get('/callback', async (req, res) => {
 
     gmailWorker.start();
 
-    res.redirect('http://localhost:3000/dashboard?google=success');
+    res.redirect('https://ims-frontend-smoky-chi.vercel.app/dashboard?google=success');
   } catch (error) {
     console.error('[Google OAuth] Error:', error.message);
-    res.redirect('http://localhost:3000/dashboard?google=error');
+    res.redirect('https://ims-frontend-smoky-chi.vercel.app/dashboard?google=error');
   }
 });
 
