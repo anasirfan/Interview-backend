@@ -20,29 +20,37 @@ class AuthService {
     const accessToken = generateAccessToken(payload);
     const refreshToken = generateRefreshToken(payload);
 
-    // Store refresh token in refresh_tokens table for multi-device support
-    const tokenId = generateUUID();
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30); // 30 days expiry
+    // Try to store in refresh_tokens table (multi-device support)
+    // Fallback to old method if table doesn't exist yet
+    try {
+      const tokenId = generateUUID();
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 30); // 30 days expiry
 
-    await run(`
-      INSERT INTO refresh_tokens (id, admin_id, token, device_info, ip_address, user_agent, expires_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `, [
-      tokenId,
-      admin.id,
-      refreshToken,
-      deviceInfo.device || 'Unknown Device',
-      deviceInfo.ip || null,
-      deviceInfo.userAgent || null,
-      expiresAt.toISOString()
-    ]);
+      await run(`
+        INSERT INTO refresh_tokens (id, admin_id, token, device_info, ip_address, user_agent, expires_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `, [
+        tokenId,
+        admin.id,
+        refreshToken,
+        deviceInfo.device || 'Unknown Device',
+        deviceInfo.ip || null,
+        deviceInfo.userAgent || null,
+        expiresAt.toISOString()
+      ]);
 
-    // Clean up expired tokens for this admin
-    await run(`
-      DELETE FROM refresh_tokens 
-      WHERE admin_id = ? AND expires_at < datetime('now')
-    `, [admin.id]);
+      // Clean up expired tokens for this admin
+      await run(`
+        DELETE FROM refresh_tokens 
+        WHERE admin_id = ? AND expires_at < datetime('now')
+      `, [admin.id]);
+    } catch (error) {
+      // Fallback to old single-token method if refresh_tokens table doesn't exist
+      console.warn('refresh_tokens table not found, using legacy method:', error.message);
+      await run('UPDATE admins SET refresh_token = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', 
+        [refreshToken, admin.id]);
+    }
 
     return {
       accessToken,
@@ -57,31 +65,51 @@ class AuthService {
   }
 
   async refresh(refreshToken) {
-    // Find token in refresh_tokens table
-    const tokenRecord = await get(`
-      SELECT rt.*, a.id, a.email, a.role, a.name
-      FROM refresh_tokens rt
-      JOIN admins a ON rt.admin_id = a.id
-      WHERE rt.token = ? AND rt.expires_at > datetime('now')
-    `, [refreshToken]);
+    // Try new refresh_tokens table first
+    try {
+      const tokenRecord = await get(`
+        SELECT rt.*, a.id, a.email, a.role, a.name
+        FROM refresh_tokens rt
+        JOIN admins a ON rt.admin_id = a.id
+        WHERE rt.token = ? AND rt.expires_at > datetime('now')
+      `, [refreshToken]);
+      
+      if (tokenRecord) {
+        const payload = { id: tokenRecord.id, email: tokenRecord.email, role: tokenRecord.role };
+        const newAccessToken = generateAccessToken(payload);
+        const newRefreshToken = generateRefreshToken(payload);
+
+        const newExpiresAt = new Date();
+        newExpiresAt.setDate(newExpiresAt.getDate() + 30);
+
+        await run(`
+          UPDATE refresh_tokens 
+          SET token = ?, expires_at = ?, last_used_at = CURRENT_TIMESTAMP 
+          WHERE id = ?
+        `, [newRefreshToken, newExpiresAt.toISOString(), tokenRecord.id]);
+
+        return {
+          accessToken: newAccessToken,
+          refreshToken: newRefreshToken
+        };
+      }
+    } catch (error) {
+      console.warn('refresh_tokens table not found, trying legacy method:', error.message);
+    }
+
+    // Fallback to old method
+    const admin = await get('SELECT * FROM admins WHERE refresh_token = ?', [refreshToken]);
     
-    if (!tokenRecord) {
+    if (!admin) {
       throw new Error('Invalid refresh token');
     }
 
-    const payload = { id: tokenRecord.id, email: tokenRecord.email, role: tokenRecord.role };
+    const payload = { id: admin.id, email: admin.email, role: admin.role };
     const newAccessToken = generateAccessToken(payload);
     const newRefreshToken = generateRefreshToken(payload);
 
-    // Update the token in refresh_tokens table
-    const newExpiresAt = new Date();
-    newExpiresAt.setDate(newExpiresAt.getDate() + 30);
-
-    await run(`
-      UPDATE refresh_tokens 
-      SET token = ?, expires_at = ?, last_used_at = CURRENT_TIMESTAMP 
-      WHERE id = ?
-    `, [newRefreshToken, newExpiresAt.toISOString(), tokenRecord.id]);
+    await run('UPDATE admins SET refresh_token = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [newRefreshToken, admin.id]);
 
     return {
       accessToken: newAccessToken,
@@ -90,12 +118,19 @@ class AuthService {
   }
 
   async logout(adminId, refreshToken = null) {
-    if (refreshToken) {
-      // Logout from specific device
-      await run('DELETE FROM refresh_tokens WHERE admin_id = ? AND token = ?', [adminId, refreshToken]);
-    } else {
-      // Logout from all devices
-      await run('DELETE FROM refresh_tokens WHERE admin_id = ?', [adminId]);
+    try {
+      if (refreshToken) {
+        // Logout from specific device
+        await run('DELETE FROM refresh_tokens WHERE admin_id = ? AND token = ?', [adminId, refreshToken]);
+      } else {
+        // Logout from all devices
+        await run('DELETE FROM refresh_tokens WHERE admin_id = ?', [adminId]);
+      }
+    } catch (error) {
+      // Fallback to old method if refresh_tokens table doesn't exist
+      console.warn('refresh_tokens table not found, using legacy logout:', error.message);
+      await run('UPDATE admins SET refresh_token = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        [adminId]);
     }
   }
 
