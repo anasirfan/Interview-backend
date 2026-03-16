@@ -141,6 +141,40 @@ class EmailService {
     }
   }
 
+  async sendEmailWithAttachment({ to, subject, body, attachmentPath, attachmentName }) {
+    const path = require('path');
+    const filename = attachmentName || path.basename(attachmentPath);
+    
+    // Determine MIME type
+    let mimeType = 'application/octet-stream';
+    if (filename.toLowerCase().endsWith('.pdf')) {
+      mimeType = 'application/pdf';
+    } else if (filename.toLowerCase().endsWith('.zip')) {
+      mimeType = 'application/zip';
+    } else if (filename.toLowerCase().endsWith('.doc') || filename.toLowerCase().endsWith('.docx')) {
+      mimeType = 'application/msword';
+    }
+    
+    const attachments = [{
+      filename,
+      path: attachmentPath,
+      mimeType
+    }];
+    
+    logger.info('EMAIL', 'Sending email with attachment', {
+      to,
+      filename,
+      mimeType
+    });
+
+    return this.sendEmail({
+      to,
+      subject,
+      body,
+      attachments
+    });
+  }
+
   async sendAssessmentEmail({ candidateEmail, candidateName, subject, body, attachmentPath = null, attachmentFilename = null }) {
     const attachments = [];
     
