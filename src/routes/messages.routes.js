@@ -13,10 +13,12 @@ router.get('/candidates', authenticate, async (req, res) => {
         (SELECT COUNT(*) FROM messages 
          WHERE candidate_id = c.id 
          AND direction = 'RECEIVED' 
-         AND is_read = 0) as unread_count
+         AND is_read = 0) as unread_count,
+        (SELECT MAX(created_at) FROM messages 
+         WHERE candidate_id = c.id) as last_message_date
       FROM candidates c
       INNER JOIN messages m ON c.id = m.candidate_id
-      ORDER BY c.updated_at DESC
+      ORDER BY last_message_date DESC
     `);
     
     sendSuccess(res, 'Candidates with messages retrieved', candidates);
