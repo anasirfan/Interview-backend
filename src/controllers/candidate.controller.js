@@ -2,6 +2,7 @@ const candidateService = require('../services/candidate.service');
 const { sendSuccess, sendError } = require('../utils/apiResponse');
 const logger = require('../services/logger.service');
 const emailService = require('../services/email.service');
+const stageChangeEmailService = require('../services/stage-change-email.service');
 const fs = require('fs');
 const path = require('path');
 
@@ -156,10 +157,27 @@ async function updateCandidate(req, res) {
 async function updateCandidateStatus(req, res) {
   try {
     const { status, roundStage } = req.body;
+    
+    // Get current candidate data to track previous stage
+    const currentCandidate = await candidateService.getById(req.params.id);
+    const previousStage = currentCandidate?.status || currentCandidate?.round_stage;
+    
     const candidate = await candidateService.update(req.params.id, { status, round_stage: roundStage });
     
     if (!candidate) {
       return sendError(res, 'Candidate not found', 404);
+    }
+
+    // Trigger stage change email (async, don't wait)
+    const newStage = status || roundStage;
+    if (newStage && newStage !== previousStage) {
+      stageChangeEmailService.handleStageChange(candidate, newStage, previousStage)
+        .catch(err => {
+          logger.error('STAGE_EMAIL', 'Stage change email failed (non-blocking)', {
+            error: err.message,
+            candidateId: candidate.id
+          });
+        });
     }
 
     sendSuccess(res, 'Status updated', candidate);
