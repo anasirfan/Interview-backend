@@ -9,7 +9,14 @@ async function login(req, res) {
       return sendError(res, 'Email and password are required', 400);
     }
 
-    const result = await authService.login(email, password);
+    // Capture device information for multi-device support
+    const deviceInfo = {
+      ip: req.ip || req.connection.remoteAddress,
+      userAgent: req.headers['user-agent'],
+      device: req.body.deviceName || 'Web Browser'
+    };
+
+    const result = await authService.login(email, password, deviceInfo);
     
     res.cookie('refreshToken', result.refreshToken, {
       httpOnly: true,
@@ -49,7 +56,16 @@ async function refresh(req, res) {
 
 async function logout(req, res) {
   try {
-    await authService.logout(req.user.id);
+    const { refreshToken, logoutAll } = req.body;
+    
+    if (logoutAll) {
+      // Logout from all devices
+      await authService.logout(req.user.id);
+    } else {
+      // Logout from current device only
+      await authService.logout(req.user.id, refreshToken);
+    }
+    
     res.clearCookie('refreshToken');
     sendSuccess(res, 'Logout successful');
   } catch (error) {
