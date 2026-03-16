@@ -60,6 +60,7 @@ app.use('/api/logs', logsRoutes);
 app.use('/api/messages', messagesRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/cron', cronRoutes);
+app.use('/api/automation', require('./routes/automation.routes'));
 
 app.get('/api/health', (_req, res) => {
   res.json({ success: true, message: 'IMS API is running', data: null });

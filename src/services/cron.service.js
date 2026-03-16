@@ -12,7 +12,8 @@ class CronService {
       replyCheck: false,
       healthCheck: false,
       statusTransition: false,
-      autoMatchRecordings: false
+      autoMatchRecordings: false,
+      assessmentAutomation: false
     };
   }
 
@@ -466,8 +467,42 @@ class CronService {
       scheduled: false
     });
 
+    this.jobs.assessmentAutomation = cron.schedule('*/15 * * * *', async () => {
+      console.log('[CronService] Running assessment automation...');
+      try {
+        await this.processAssessmentAutomation();
+      } catch (error) {
+        console.error('[CronService] Assessment automation failed:', error.message);
+      }
+    }, {
+      scheduled: false
+    });
+
     this.isInitialized = true;
     console.log('[CronService] Cron jobs initialized (not started)');
+  }
+
+  async processAssessmentAutomation() {
+    const startTime = Date.now();
+    console.log('[CronService] Processing assessment automation...');
+    
+    try {
+      const automationService = require('./assessment-automation.service');
+      const results = await automationService.processInboxCandidates();
+      
+      const duration = Date.now() - startTime;
+      const message = `Processed: ${results.processed}, Skipped: ${results.skipped}, Failed: ${results.failed}`;
+      
+      await this.logCronExecution('assessment_automation', 'SUCCESS', duration, message);
+      console.log(`[CronService] ${message} (${duration}ms)`);
+      
+      return { success: true, ...results, duration };
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      await this.logCronExecution('assessment_automation', 'ERROR', duration, 'Failed', error.message);
+      console.error('[CronService] Assessment automation error:', error.message);
+      throw error;
+    }
   }
 
   start() {
@@ -498,7 +533,8 @@ class CronService {
       replies: { running: this.jobsRunning.replyCheck },
       health: { running: this.jobsRunning.healthCheck },
       statusTransition: { running: this.jobsRunning.statusTransition },
-      autoMatchRecordings: { running: this.jobsRunning.autoMatchRecordings }
+      autoMatchRecordings: { running: this.jobsRunning.autoMatchRecordings },
+      assessmentAutomation: { running: this.jobsRunning.assessmentAutomation }
     };
   }
 }

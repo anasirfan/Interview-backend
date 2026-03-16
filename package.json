@@ -23,6 +23,7 @@
     "multer": "^1.4.5-lts.1",
     "node-cron": "^3.0.3",
     "pdf-parse": "^1.1.1",
+    "puppeteer": "^24.39.1",
     "sqlite3": "^5.1.7"
   },
   "devDependencies": {

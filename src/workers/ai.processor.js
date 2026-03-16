@@ -136,6 +136,46 @@ Keep it under 150 words. Professional but friendly tone. Make sure to mention th
     }
   }
 
+  async generateAssessment(prompt) {
+    try {
+      const ai = getAI();
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.1-flash-lite-preview',
+        contents: prompt
+      });
+      const json = extractJSON(response.text);
+      const parsed = JSON.parse(json);
+      console.log('[AiProcessor] Assessment generated successfully');
+      return parsed;
+    } catch (error) {
+      console.error('[AiProcessor] Assessment generation error:', error);
+      throw error;
+    }
+  }
+
+  async analyzeProfile(prompt) {
+    try {
+      const ai = getAI();
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.1-flash-lite-preview',
+        contents: prompt
+      });
+      const json = extractJSON(response.text);
+      const parsed = JSON.parse(json);
+      console.log('[AiProcessor] Profile analyzed successfully');
+      return parsed;
+    } catch (error) {
+      console.error('[AiProcessor] Profile analysis error:', error);
+      // Return fallback
+      return {
+        seniority: 'Mid',
+        techStack: ['JavaScript', 'Node.js', 'React'],
+        uniqueStrength: 'Full-stack development',
+        skillGaps: []
+      };
+    }
+  }
+
   async generateComprehensiveSummary(candidateName, cvText) {
     try {
       const ai = getAI();
