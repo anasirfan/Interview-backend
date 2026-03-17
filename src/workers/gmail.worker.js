@@ -267,6 +267,8 @@ class GmailWorker {
           }
 
           const candidateId = require('../utils/uuid').generateUUID();
+          const { normalizePosition } = require('../utils/position-normalizer');
+          const normalizedPosition = normalizePosition(position);
           
           await run(`
             INSERT INTO candidates (
@@ -278,7 +280,7 @@ class GmailWorker {
             candidateName,
             candidateEmail,
             candidatePhone || null,
-            position,
+            normalizedPosition,
             status,
             status,
             cvFilename,

@@ -47,7 +47,7 @@ router.get('/scheduled', async (req, res) => {
     const { sendSuccess, sendError } = require('../utils/apiResponse');
     
     const scheduledCandidates = await query(`
-      SELECT id, name, email, phone, position, interview_date, meet_link, round_stage, cv_path
+      SELECT id, name, email, phone, position, interview_date, meet_link, round_stage, cv_path, interviewer
       FROM candidates 
       WHERE status = 'SCHEDULED' 
         AND interview_date IS NOT NULL 

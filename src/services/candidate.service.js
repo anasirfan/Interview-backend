@@ -1,9 +1,13 @@
 const { query, get, run } = require('../database/db');
 const { generateUUID } = require('../utils/uuid');
+const { normalizePosition } = require('../utils/position-normalizer');
 
 class CandidateService {
   async create(data) {
     const id = generateUUID();
+    
+    // Normalize position before saving
+    const normalizedPosition = normalizePosition(data.position);
     
     await run(`
       INSERT INTO candidates (
@@ -14,7 +18,7 @@ class CandidateService {
       data.name,
       data.email,
       data.phone || null,
-      data.position,
+      normalizedPosition,
       data.status || 'INBOX',
       data.roundStage || 'INBOX',
       data.cvPath || null,
@@ -65,6 +69,11 @@ class CandidateService {
   async update(id, data) {
     const fields = [];
     const values = [];
+
+    // Normalize position if it's being updated
+    if (data.position !== undefined) {
+      data.position = normalizePosition(data.position);
+    }
 
     const allowedFields = [
       'name', 'email', 'phone', 'position', 'interview_date', 'status', 'round_stage',

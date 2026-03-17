@@ -285,8 +285,8 @@ router.post('/schedule', authenticate, async (req, res) => {
     const event = {
       summary,
       description: description || `Interview with ${candidate.name} for ${candidate.position}`,
-      start: { dateTime: startTime, timeZone: 'UTC' },
-      end: { dateTime: endTime, timeZone: 'UTC' },
+      start: { dateTime: startTime, timeZone: 'Asia/Karachi' },
+      end: { dateTime: endTime, timeZone: 'Asia/Karachi' },
       attendees: attendees || [{ email: candidate.email }],
       conferenceData: {
         createRequest: {
@@ -588,6 +588,9 @@ router.post('/process-selected-cvs', authenticate, async (req, res) => {
           .trim();
         const candidateName = nameFromFile.length > 2 ? nameFromFile : 'Unknown Candidate';
 
+        const { normalizePosition } = require('../utils/position-normalizer');
+        const normalizedPosition = normalizePosition('Internship Candidate');
+
         const candidateId = generateUUID();
         await run(`
           INSERT INTO candidates (
@@ -597,7 +600,7 @@ router.post('/process-selected-cvs', authenticate, async (req, res) => {
           candidateId,
           candidateName,
           `${candidateName.toLowerCase().replace(/\s+/g, '.')}@pending.com`,
-          'Internship Candidate',
+          normalizedPosition,
           'INBOX',
           'INBOX',
           safeName,
@@ -1054,11 +1057,11 @@ router.post('/create-meet', authenticate, async (req, res) => {
       description: `Interview for ${position} position at LIMI AI\nInterviewer: ${interviewer || 'TBD'}`,
       start: {
         dateTime: startDateTime.toISOString(),
-        timeZone: 'UTC',
+        timeZone: 'Asia/Karachi',
       },
       end: {
         dateTime: endDateTime.toISOString(),
-        timeZone: 'UTC',
+        timeZone: 'Asia/Karachi',
       },
       attendees: attendees,
       conferenceData: {

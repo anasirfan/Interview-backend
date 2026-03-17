@@ -466,6 +466,8 @@ async function rescheduleInterview(req, res) {
 
     const oldDateTime = candidate.interview_date;
     const newDateTime = new Date(dateTime);
+    
+    // No time validation - allow rescheduling past interviews
 
     // Send reschedule email
     const emailResult = await emailService.sendEmail({
@@ -478,11 +480,14 @@ async function rescheduleInterview(req, res) {
     if (candidate.calendar_event_id) {
       try {
         const calendarService = require('../services/calendar.service');
+        // 30 minutes hardcoded duration
+        const endDateTime = new Date(new Date(dateTime).getTime() + 30 * 60 * 1000);
+        
         await calendarService.updateEvent(candidate.calendar_event_id, {
           start: dateTime,
-          end: new Date(new Date(dateTime).getTime() + 60 * 60 * 1000).toISOString(), // +1 hour
+          end: endDateTime.toISOString(),
           summary: `Interview: ${candidate.name} - ${candidate.position}`,
-          description: `Rescheduled interview\nMeet Link: ${candidate.meet_link}`
+          description: `Rescheduled interview\nMeet Link: ${candidate.meet_link || 'TBD'}\nInterviewer: ${candidate.interviewer || 'TBD'}`
         });
         logger.success('RESCHEDULE', `Calendar event updated for ${candidate.name}`);
       } catch (calError) {

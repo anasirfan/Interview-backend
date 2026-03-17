@@ -2,7 +2,7 @@ const { query } = require('../database/db');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs').promises;
-const aiProcessor = require('../workers/ai.processor');
+const { aiProcessor } = require('../workers/ai.processor');
 const pdfService = require('./pdf.service');
 const emailService = require('./email.service');
 const logger = require('./logger.service');
@@ -24,17 +24,34 @@ class AssessmentAutomationService {
       // Analyze candidate profile
       const analysis = await this.analyzeCandidateProfile(cvContent, candidate.position);
       
+      logger.info('ASSESSMENT_ANALYSIS', 'Profile analysis complete', { 
+        seniority: analysis.seniority,
+        techStack: analysis.techStack,
+        uniqueStrength: analysis.uniqueStrength
+      });
+      
       // Generate assessment using AI
       const assessmentPrompt = this.buildAssessmentPrompt(candidate, analysis, jobDescription);
       const assessmentContent = await aiProcessor.generateAssessment(assessmentPrompt);
       
-      return {
-        title: assessmentContent.title,
-        content: assessmentContent.content,
-        difficulty: analysis.seniority,
-        techStack: analysis.techStack,
-        uniqueStrength: analysis.uniqueStrength
+      // Ensure we have all required fields
+      const result = {
+        title: assessmentContent?.title || `Technical Assessment for ${candidate.position}`,
+        content: assessmentContent?.content || 'Assessment content generation failed',
+        difficulty: assessmentContent?.difficulty || analysis.seniority || 'Mid-Level',
+        techStack: assessmentContent?.techStack || analysis.techStack || ['JavaScript', 'Node.js'],
+        uniqueStrength: assessmentContent?.uniqueStrength || analysis.uniqueStrength || 'Full-stack development'
       };
+      
+      logger.info('ASSESSMENT_RESULT', 'Assessment data prepared', {
+        hasTitle: !!result.title,
+        hasContent: !!result.content,
+        difficulty: result.difficulty,
+        techStackCount: result.techStack.length,
+        uniqueStrength: result.uniqueStrength
+      });
+      
+      return result;
     } catch (error) {
       logger.error('ASSESSMENT_GEN', 'Failed to generate assessment', { error: error.message, candidateId: candidate.id });
       throw error;
@@ -64,28 +81,53 @@ class AssessmentAutomationService {
     }
   }
 
+
   /**
-   * Analyze candidate profile to determine seniority, tech stack, strengths
+   * Calculate seniority based on years of experience
+   */
+  calculateSeniority(yearsOfExperience) {
+    if (yearsOfExperience < 0.5) return 'Intern';
+    if (yearsOfExperience < 2) return 'Junior';
+    if (yearsOfExperience < 5) return 'Mid-Level';
+    return 'Senior';
+  }
+
+  /**
+   * Analyze candidate profile to extract key information
    */
   async analyzeCandidateProfile(cvContent, position) {
     try {
-      const analysisPrompt = `Analyze this candidate profile and extract:
-1. Seniority Level (Junior/Mid/Senior)
-2. Core Tech Stack (list main technologies)
-3. Unique Strength (their standout project or skill)
-4. Skill Gaps (what's missing for the role)
+      // Position is already normalized in the database, use it directly
+      const analysisPrompt = `Analyze this candidate's CV for the position: ${position}
 
-Position: ${position}
-CV Content: ${cvContent}
+CV Content:
+${cvContent.substring(0, 3000)}
 
-Return as JSON with keys: seniority, techStack (array), uniqueStrength, skillGaps (array)`;
+Extract and return:
+1. Years of Experience (total professional experience as a number, e.g., 0.5, 1.5, 3, 6)
+2. Tech Stack (array of technologies they know)
+3. Unique Strength (what makes them stand out - be specific, not generic)
+4. Skill Gaps (areas they need to improve for this role - can be empty array if none)
+
+Return as JSON with keys: yearsOfExperience (number), techStack (array), uniqueStrength (string), skillGaps (array)`;
 
       const analysis = await aiProcessor.analyzeProfile(analysisPrompt);
-      return analysis;
+      
+      // Calculate seniority based on experience
+      const seniority = this.calculateSeniority(analysis.yearsOfExperience || 2);
+      
+      return {
+        seniority,
+        yearsOfExperience: analysis.yearsOfExperience || 2,
+        techStack: analysis.techStack || ['JavaScript', 'Node.js'],
+        uniqueStrength: analysis.uniqueStrength || 'Full-stack development',
+        skillGaps: analysis.skillGaps || []
+      };
     } catch (error) {
       // Fallback to basic analysis
       return {
-        seniority: 'Mid',
+        seniority: 'Mid-Level',
+        yearsOfExperience: 2,
         techStack: ['JavaScript', 'Node.js', 'React'],
         uniqueStrength: 'Full-stack development',
         skillGaps: []
@@ -97,14 +139,19 @@ Return as JSON with keys: seniority, techStack (array), uniqueStrength, skillGap
    * Build comprehensive assessment prompt for AI
    */
   buildAssessmentPrompt(candidate, analysis, jobDescription) {
+    // Use candidate.position directly - it's already normalized in the database
+    const isSoftwareRole = /software|frontend|backend|full-stack|web|react|node|developer/i.test(candidate.position);
+    
     return `Generate a technical assessment for a candidate applying for: ${candidate.position}
 
 CANDIDATE PROFILE:
 - Name: ${candidate.name}
+- Position: ${candidate.position}
 - Seniority: ${analysis.seniority}
+- Years of Experience: ${analysis.yearsOfExperience || 2}
 - Tech Stack: ${analysis.techStack.join(', ')}
 - Unique Strength: ${analysis.uniqueStrength}
-- Skill Gaps: ${analysis.skillGaps.join(', ')}
+- Skill Gaps: ${analysis.skillGaps.join(', ') || 'None identified'}
 
 JOB DESCRIPTION:
 ${jobDescription || 'Full-stack developer position requiring strong problem-solving skills'}
@@ -125,13 +172,33 @@ ${analysis.seniority === 'Junior' ? '- Focus on Implementation: Can they build w
 ${analysis.seniority === 'Mid' ? '- Balance Implementation and Design: Can they architect scalable solutions?' : ''}
 ${analysis.seniority === 'Senior' ? '- Focus on Architecture & Edge Cases: Can they handle high-scale systems?' : ''}
 
-UNIQUE STRENGTH HOOK:
-Build the assessment around their "${analysis.uniqueStrength}" to keep them engaged.
+UNIQUE STRENGTH INTEGRATION:
+- DO NOT use placeholders like "[Unique Strength]" or "[Skill Gaps]"
+- REPLACE with actual values: "${analysis.uniqueStrength}" and "${analysis.skillGaps.join(', ') || 'system design and scalability'}"
+- Build one challenge specifically around their strength: "${analysis.uniqueStrength}"
+${analysis.skillGaps.length > 0 ? `- Address their gaps (${analysis.skillGaps.join(', ')}) in the assessment design` : ''}
+
+${isSoftwareRole ? `FRONTEND REQUIREMENT:
+- This is a software development role
+- MUST include a frontend component in the assessment
+- Specify UI/UX requirements (React, Next.js, or similar)
+- Include design mockups or wireframe expectations
+- Mention responsive design and user experience criteria` : ''}
+
+CRITICAL RULES:
+1. NO PLACEHOLDERS - Use actual values from the candidate profile
+2. Replace "[Unique Strength]" with: ${analysis.uniqueStrength}
+3. Replace "[Skill Gaps]" with: ${analysis.skillGaps.join(', ') || 'advanced system architecture'}
+4. Make challenges specific and actionable
+5. Include exact tech stack from their CV: ${analysis.techStack.join(', ')}
 
 Format the response as:
 {
   "title": "Assessment Title",
-  "content": "Full assessment markdown content with sections, code examples, and evaluation criteria"
+  "content": "Full assessment markdown content with sections, code examples, and evaluation criteria. NO PLACEHOLDERS ALLOWED.",
+  "difficulty": "${analysis.seniority}",
+  "techStack": ${JSON.stringify(analysis.techStack)},
+  "uniqueStrength": "${analysis.uniqueStrength}"
 }`;
   }
 
@@ -172,6 +239,7 @@ Format the response as:
    */
   async generateAssessmentEmail(candidate, assessmentData) {
     try {
+      // Use candidate.position directly - it's already normalized in the database
       const emailPrompt = `Generate a professional email to send a technical assessment to a candidate.
 
 Candidate: ${candidate.name}
@@ -259,7 +327,7 @@ Limi AI Recruitment Team`
       // Generate PDF
       const pdfFileName = await this.generateAssessmentPDF(assessmentData, candidate);
 
-      // Generate email
+      // Generate email (position is already normalized in candidate.position)
       const emailData = await this.generateAssessmentEmail(candidate, assessmentData);
 
       // Update candidate record
@@ -323,15 +391,17 @@ Limi AI Recruitment Team`
         attachmentName: `Assessment-${candidate.name.replace(/\s+/g, '-')}.pdf`
       });
 
-      // Update candidate status
+      // Update candidate status and save assessment link
       await query(
         `UPDATE candidates 
          SET assessment_status = ?, 
              assessment_sent_at = CURRENT_TIMESTAMP,
+             assessment_link = ?,
+             assessment_given = 1,
              status = 'ASSESSMENT',
              round_stage = 'ASSESSMENT'
          WHERE id = ?`,
-        ['sent', candidateId]
+        ['sent', pdfFileName, candidateId]
       );
 
       logger.success('ASSESSMENT_SEND', `Assessment sent to ${candidate.name}`, { candidateId });
@@ -372,9 +442,10 @@ Limi AI Recruitment Team`
   }
 
   /**
-   * Process all INBOX candidates (for cron job)
+   * Process INBOX candidates (for cron job or manual trigger)
+   * @param {number|null} limit - Optional limit for batch processing (null = all up to 50)
    */
-  async processInboxCandidates() {
+  async processInboxCandidates(limit = null) {
     try {
       const settings = await this.getAutomationSettings();
       
@@ -383,7 +454,8 @@ Limi AI Recruitment Team`
         return { processed: 0, skipped: 0, failed: 0 };
       }
 
-      // Get all INBOX candidates without assessment
+      // Get INBOX candidates without assessment
+      const maxLimit = limit || 50; // Default to 50 if no limit specified
       const candidates = await query(`
         SELECT * FROM candidates 
         WHERE status = 'INBOX' 
@@ -391,8 +463,8 @@ Limi AI Recruitment Team`
         AND (assessment_status IS NULL OR assessment_status = 'failed')
         AND assessment_retry_count < 3
         ORDER BY created_at ASC
-        LIMIT 50
-      `);
+        LIMIT ?
+      `, [maxLimit]);
 
       logger.info('AUTOMATION_CRON', `Found ${candidates.length} candidates to process`);
 
