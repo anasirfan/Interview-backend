@@ -251,9 +251,15 @@ router.post('/schedule', authenticate, async (req, res) => {
     // startTime comes from frontend as local datetime string (e.g., "2026-03-18T09:00:00")
     // When using timeZone parameter, Google expects datetime in local format
     if (!endTime) {
-      const startDate = new Date(startTime);
-      const endDate = new Date(startDate.getTime() + 30 * 60 * 1000);
-      endTime = endDate.toISOString().slice(0, 19);
+      // Calculate end time by manipulating the datetime string directly
+      const [datePart, timePart] = startTime.split('T');
+      const [hours, minutes, seconds] = timePart.split(':').map(Number);
+      
+      const totalMinutes = hours * 60 + minutes + 30;
+      const endHours = Math.floor(totalMinutes / 60) % 24;
+      const endMinutes = totalMinutes % 60;
+      
+      endTime = `${datePart}T${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}:${String(seconds || 0).padStart(2, '0')}`;
     }
 
     const candidate = await candidateService.findById(candidateId);
@@ -1046,12 +1052,16 @@ router.post('/create-meet', authenticate, async (req, res) => {
     // When using timeZone parameter, Google expects datetime in local format (no timezone offset)
     const durationInMinutes = duration || 30; // Default to 30 mins
     
-    // Parse the datetime and add duration
-    const startDate = new Date(dateTime);
-    const endDate = new Date(startDate.getTime() + durationInMinutes * 60000);
+    // Calculate end time by manipulating the datetime string directly
+    // This avoids timezone conversion issues
+    const [datePart, timePart] = dateTime.split('T');
+    const [hours, minutes, seconds] = timePart.split(':').map(Number);
     
-    // Format as local datetime string (YYYY-MM-DDTHH:mm:ss)
-    const endDateTime = endDate.toISOString().slice(0, 19);
+    const totalMinutes = hours * 60 + minutes + durationInMinutes;
+    const endHours = Math.floor(totalMinutes / 60) % 24;
+    const endMinutes = totalMinutes % 60;
+    
+    const endDateTime = `${datePart}T${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}:${String(seconds || 0).padStart(2, '0')}`;
     
     // Build attendees list: candidate + interviewer
     const attendees = [];
