@@ -238,59 +238,28 @@ Format the response as:
    * Generate assessment email template
    */
   async generateAssessmentEmail(candidate, assessmentData) {
-    try {
-      // Use candidate.position directly - it's already normalized in the database
-      const emailPrompt = `Generate a professional email to send a technical assessment to a candidate.
+    // Use the standard LIMI AI template format
+    return {
+      subject: `Technical Assessment - ${candidate.position} Position`,
+      body: `Dear ${candidate.name},
 
-Candidate: ${candidate.name}
-Position: ${candidate.position}
-Assessment Title: ${assessmentData.title}
+Thank you for your interest in the ${candidate.position} position at LIMI AI.
 
-The email should:
-- Be warm and encouraging
-- Explain the assessment is attached
-- Mention 48-hour deadline
-- Provide submission instructions (reply with GitHub repo link or Google Drive link)
-- Wish them good luck
+We would like to invite you to complete a technical assessment as the next step in our hiring process. This assessment will help us evaluate your skills and determine if you're a good fit for the role.
 
-Return as JSON with keys: subject, body`;
+Please find the assessment details below and submit your completed work within 48 hours.
 
-      const emailContent = await aiProcessor.generateEmail(
-        candidate.name,
-        candidate.position,
-        'Assessment',
-        'TBD',
-        48
-      );
+Assessment Instructions:
+- Review the attached assessment file carefully
+- Complete all required tasks
+- Submit your solution via the provided link
+- Feel free to reach out if you have any questions
 
-      return {
-        subject: `Technical Assessment - ${candidate.position} Position`,
-        body: emailContent
-      };
-    } catch (error) {
-      // Fallback template
-      return {
-        subject: `Technical Assessment - ${candidate.position} Position`,
-        body: `Dear ${candidate.name},
-
-Thank you for your interest in the ${candidate.position} position at Limi AI.
-
-We're excited to move forward with your application! Please find attached your technical assessment: "${assessmentData.title}".
-
-Assessment Details:
-- Deadline: 48 hours from now
-- Submission: Reply to this email with your GitHub repository link or Google Drive link
-
-This assessment is designed to showcase your skills and problem-solving abilities. Take your time and demonstrate your best work.
-
-If you have any questions, feel free to reach out.
-
-Best of luck!
+We look forward to reviewing your submission!
 
 Best regards,
-Limi AI Recruitment Team`
-      };
-    }
+LIMI AI Recruitment Team`
+    };
   }
 
   /**
