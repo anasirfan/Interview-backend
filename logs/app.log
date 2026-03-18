@@ -556,3 +556,7 @@
 {"timestamp":"2026-03-17T05:25:53.220Z","level":"INFO","category":"PDF_GEN","message":"Generating PDF for Kamran Shahid","details":{"candidateId":"ffaccada-1133-4abc-b937-0c549827f3c1"},"pid":30688}
 {"timestamp":"2026-03-17T05:25:55.961Z","level":"SUCCESS","category":"PDF_GEN","message":"PDF generated: assessment-ffaccada-1133-4abc-b937-0c549827f3c1-1773725155956.pdf","details":{"candidateId":"ffaccada-1133-4abc-b937-0c549827f3c1"},"pid":30688}
 {"timestamp":"2026-03-17T05:25:57.446Z","level":"SUCCESS","category":"ASSESSMENT_PROCESS","message":"Assessment preview for Kamran Shahid","details":{"candidateId":"ffaccada-1133-4abc-b937-0c549827f3c1","mode":"preview"},"pid":30688}
+{"timestamp":"2026-03-18T01:05:51.229Z","level":"INFO","category":"AUTOMATION_CRON","message":"Automation is OFF, skipping","details":{},"pid":23292}
+{"timestamp":"2026-03-18T01:05:56.430Z","level":"INFO","category":"AUTOMATION_CRON","message":"Automation is OFF, skipping","details":{},"pid":23292}
+{"timestamp":"2026-03-18T01:09:17.743Z","level":"SUCCESS","category":"AUTOMATION_SETTINGS","message":"Automation mode updated to: automated","details":{},"pid":23292}
+{"timestamp":"2026-03-18T01:09:18.949Z","level":"SUCCESS","category":"AUTOMATION_SETTINGS","message":"Automation mode updated to: off","details":{},"pid":23292}

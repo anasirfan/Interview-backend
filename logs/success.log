@@ -245,3 +245,5 @@
 {"timestamp":"2026-03-17T05:21:53.044Z","level":"SUCCESS","category":"MEETING_INVITE","message":"Meeting invitation sent to HAJRA RAO","details":{"candidateId":"eac71e6f-8b3a-4033-b228-25fbc747cded","email":"hajraraohr@gmail.com","meetLink":"https://meet.google.com/pna-qqot-kdg","dateTime":"2026-03-17T22:00:00"},"pid":30688}
 {"timestamp":"2026-03-17T05:25:55.961Z","level":"SUCCESS","category":"PDF_GEN","message":"PDF generated: assessment-ffaccada-1133-4abc-b937-0c549827f3c1-1773725155956.pdf","details":{"candidateId":"ffaccada-1133-4abc-b937-0c549827f3c1"},"pid":30688}
 {"timestamp":"2026-03-17T05:25:57.446Z","level":"SUCCESS","category":"ASSESSMENT_PROCESS","message":"Assessment preview for Kamran Shahid","details":{"candidateId":"ffaccada-1133-4abc-b937-0c549827f3c1","mode":"preview"},"pid":30688}
+{"timestamp":"2026-03-18T01:09:17.743Z","level":"SUCCESS","category":"AUTOMATION_SETTINGS","message":"Automation mode updated to: automated","details":{},"pid":23292}
+{"timestamp":"2026-03-18T01:09:18.949Z","level":"SUCCESS","category":"AUTOMATION_SETTINGS","message":"Automation mode updated to: off","details":{},"pid":23292}

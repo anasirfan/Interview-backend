@@ -448,11 +448,6 @@ Limi AI Recruitment Team`
   async processInboxCandidates(limit = null) {
     try {
       const settings = await this.getAutomationSettings();
-      
-      if (settings.mode === 'off') {
-        logger.info('AUTOMATION_CRON', 'Automation is OFF, skipping');
-        return { processed: 0, skipped: 0, failed: 0 };
-      }
 
       // Get INBOX candidates without assessment
       const maxLimit = limit || 50; // Default to 50 if no limit specified
@@ -466,7 +461,7 @@ Limi AI Recruitment Team`
         LIMIT ?
       `, [maxLimit]);
 
-      logger.info('AUTOMATION_CRON', `Found ${candidates.length} candidates to process`);
+      logger.info('AUTOMATION_PROCESS', `Found ${candidates.length} candidates to process`);
 
       const results = {
         processed: 0,
@@ -474,27 +469,31 @@ Limi AI Recruitment Team`
         failed: 0
       };
 
+      // If called manually (with limit), process all regardless of automation mode
+      const isManualTrigger = limit !== null;
+
       for (const candidate of candidates) {
         try {
           // Check per-candidate override
           const mode = candidate.automation_mode || settings.mode;
           
-          if (mode === 'automated') {
+          // Process if manual trigger OR if automation mode is 'automated'
+          if (isManualTrigger || mode === 'automated') {
             await this.processCandidateAssessment(candidate.id, 'send');
             results.processed++;
           } else {
             results.skipped++;
           }
         } catch (error) {
-          logger.error('AUTOMATION_CRON', `Failed for candidate ${candidate.name}`, { error: error.message });
+          logger.error('AUTOMATION_PROCESS', `Failed for candidate ${candidate.name}`, { error: error.message });
           results.failed++;
         }
       }
 
-      logger.success('AUTOMATION_CRON', 'Batch processing completed', results);
+      logger.success('AUTOMATION_PROCESS', 'Batch processing completed', results);
       return results;
     } catch (error) {
-      logger.error('AUTOMATION_CRON', 'Cron job failed', { error: error.message });
+      logger.error('AUTOMATION_PROCESS', 'Processing failed', { error: error.message });
       throw error;
     }
   }

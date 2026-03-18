@@ -138,7 +138,62 @@ router.post('/send-email/:candidateId', authenticate, authorize('SUPER_ADMIN', '
   }
 });
 
-// Process batch of selected candidates
+// Generate batch assessments (preview mode - doesn't send emails)
+router.post('/process-batch-preview', authenticate, authorize('SUPER_ADMIN', 'HR_ADMIN'), async (req, res) => {
+  try {
+    const { candidateIds } = req.body;
+    const logger = require('../services/logger.service');
+    
+    if (!candidateIds || !Array.isArray(candidateIds) || candidateIds.length === 0) {
+      return sendError(res, 'candidateIds array is required', 400);
+    }
+    
+    logger.info('BATCH_PREVIEW', `Generating assessments for ${candidateIds.length} candidates`);
+    
+    let processed = 0;
+    let failed = 0;
+    const results = [];
+    
+    for (const candidateId of candidateIds) {
+      try {
+        // Use 'preview' mode to generate without sending
+        const result = await automationService.processCandidateAssessment(candidateId, 'preview');
+        
+        if (result.status === 'generated') {
+          processed++;
+          results.push({ 
+            candidateId, 
+            status: 'success', 
+            name: result.candidateName,
+            assessmentData: result.assessmentData,
+            emailData: result.emailData,
+            pdfFileName: result.pdfFileName
+          });
+        } else {
+          failed++;
+          results.push({ candidateId, status: 'failed', error: 'Generation failed' });
+        }
+      } catch (error) {
+        failed++;
+        results.push({ candidateId, status: 'failed', error: error.message });
+        logger.error('BATCH_PREVIEW', `Failed to generate for candidate ${candidateId}`, { error: error.message });
+      }
+    }
+    
+    logger.success('BATCH_PREVIEW', `Batch preview complete: ${processed} generated, ${failed} failed`);
+    
+    sendSuccess(res, `Batch preview complete. ${processed} generated, ${failed} failed.`, {
+      total: candidateIds.length,
+      processed,
+      failed,
+      results
+    });
+  } catch (error) {
+    sendError(res, error.message || 'Failed to generate batch', 500);
+  }
+});
+
+// Send batch assessments (for already generated assessments)
 router.post('/process-batch', authenticate, authorize('SUPER_ADMIN', 'HR_ADMIN'), async (req, res) => {
   try {
     const { candidateIds } = req.body;
@@ -148,9 +203,9 @@ router.post('/process-batch', authenticate, authorize('SUPER_ADMIN', 'HR_ADMIN')
       return sendError(res, 'candidateIds array is required', 400);
     }
     
-    logger.info('BATCH_PROCESS', `Processing ${candidateIds.length} selected candidates`);
+    logger.info('BATCH_SEND', `Sending assessments for ${candidateIds.length} selected candidates`);
     
-    let processed = 0;
+    let sent = 0;
     let failed = 0;
     const results = [];
     
@@ -159,29 +214,29 @@ router.post('/process-batch', authenticate, authorize('SUPER_ADMIN', 'HR_ADMIN')
         const result = await automationService.processCandidateAssessment(candidateId, 'send');
         
         if (result.status === 'sent' || result.status === 'generated') {
-          processed++;
+          sent++;
           results.push({ candidateId, status: 'success', name: result.candidateName });
         } else {
           failed++;
-          results.push({ candidateId, status: 'failed', error: 'Processing failed' });
+          results.push({ candidateId, status: 'failed', error: 'Sending failed' });
         }
       } catch (error) {
         failed++;
         results.push({ candidateId, status: 'failed', error: error.message });
-        logger.error('BATCH_PROCESS', `Failed to process candidate ${candidateId}`, { error: error.message });
+        logger.error('BATCH_SEND', `Failed to send to candidate ${candidateId}`, { error: error.message });
       }
     }
     
-    logger.success('BATCH_PROCESS', `Batch processing complete: ${processed} processed, ${failed} failed`);
+    logger.success('BATCH_SEND', `Batch send complete: ${sent} sent, ${failed} failed`);
     
-    sendSuccess(res, `Batch processing complete. ${processed} processed, ${failed} failed.`, {
+    sendSuccess(res, `Batch send complete. ${sent} sent, ${failed} failed.`, {
       total: candidateIds.length,
-      processed,
+      sent,
       failed,
       results
     });
   } catch (error) {
-    sendError(res, error.message || 'Failed to process batch', 500);
+    sendError(res, error.message || 'Failed to send batch', 500);
   }
 });
 
