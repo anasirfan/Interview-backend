@@ -249,12 +249,11 @@ router.post('/schedule', authenticate, async (req, res) => {
 
     // Default to 30 minutes duration if endTime not provided
     // startTime comes from frontend as local datetime string (e.g., "2026-03-18T09:00:00")
-    // Treat it as Pakistan time by appending timezone offset
+    // When using timeZone parameter, Google expects datetime in local format
     if (!endTime) {
-      // Add 30 minutes to the time string
-      const startDate = new Date(startTime + '+05:00'); // Explicitly treat as Pakistan time
+      const startDate = new Date(startTime);
       const endDate = new Date(startDate.getTime() + 30 * 60 * 1000);
-      endTime = endDate.toISOString().slice(0, 19); // Remove Z to keep as local time
+      endTime = endDate.toISOString().slice(0, 19);
     }
 
     const candidate = await candidateService.findById(candidateId);
@@ -286,7 +285,7 @@ router.post('/schedule', authenticate, async (req, res) => {
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
     // Frontend sends datetime as local string (e.g., "2026-03-18T09:00:00")
-    // Google Calendar expects ISO format with timezone
+    // Google Calendar will interpret these as local times in Asia/Karachi
     const event = {
       summary,
       description: description || `Interview with ${candidate.name} for ${candidate.position}`,
@@ -1043,12 +1042,16 @@ router.post('/create-meet', authenticate, async (req, res) => {
     const candidateEmail = candidates[0]?.email;
     
     // Create calendar event with Google Meet
-    // dateTime comes from frontend as local datetime string (e.g., "2026-03-18T09:00:00")
-    // Treat as Pakistan time and calculate end time
+    // dateTime comes from frontend as local datetime string (e.g., "2026-03-19T21:00:00")
+    // When using timeZone parameter, Google expects datetime in local format (no timezone offset)
     const durationInMinutes = duration || 30; // Default to 30 mins
-    const startDate = new Date(dateTime + '+05:00'); // Explicitly treat as Pakistan time
+    
+    // Parse the datetime and add duration
+    const startDate = new Date(dateTime);
     const endDate = new Date(startDate.getTime() + durationInMinutes * 60000);
-    const endDateTimeISO = endDate.toISOString().slice(0, 19); // Remove Z to keep as local time
+    
+    // Format as local datetime string (YYYY-MM-DDTHH:mm:ss)
+    const endDateTime = endDate.toISOString().slice(0, 19);
     
     // Build attendees list: candidate + interviewer
     const attendees = [];
@@ -1060,6 +1063,7 @@ router.post('/create-meet', authenticate, async (req, res) => {
     }
     
     // Pass datetime strings to Google Calendar with Pakistan timezone
+    // Google Calendar will interpret these as local times in Asia/Karachi
     const event = {
       summary: `${round} - ${candidateName}`,
       description: `Interview for ${position} position at LIMI AI\nInterviewer: ${interviewer || 'TBD'}`,
@@ -1068,7 +1072,7 @@ router.post('/create-meet', authenticate, async (req, res) => {
         timeZone: 'Asia/Karachi',
       },
       end: {
-        dateTime: endDateTimeISO,
+        dateTime: endDateTime,
         timeZone: 'Asia/Karachi',
       },
       attendees: attendees,
