@@ -5,46 +5,112 @@ class PDFService {
   /**
    * Generate assessment PDF from HTML template
    */
-  async generateAssessmentPDF(data) {
+  async generateAssessmentPDF(data, retryCount = 0) {
+    const MAX_RETRIES = 3;
     let browser = null;
+    let page = null;
+    
     try {
       const html = this.buildAssessmentHTML(data);
 
+      const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || process.env.CHROME_PATH || undefined;
       browser = await puppeteer.launch({
-        headless: 'new',
+        executablePath,
+        headless: true, // classic headless is more stable on some Windows setups
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
           '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
           '--no-first-run',
           '--no-zygote',
-          '--single-process',
-          '--disable-gpu'
+          '--disable-extensions',
+          '--window-size=1280,1024'
         ],
-        timeout: 60000,
-        protocolTimeout: 60000
+        timeout: 90000,
+        protocolTimeout: 90000,
+        dumpio: false
       });
 
-      const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: 'networkidle0' });
+      page = await browser.newPage();
+      await page.setViewport({ width: 1280, height: 1024, deviceScaleFactor: 1 });
+      
+      // Set longer timeout for page operations
+      await page.setDefaultTimeout(90000);
+      await page.setDefaultNavigationTimeout(90000);
+      
+      // Load content with fallback strategy
+      let contentLoaded = false;
+      try {
+        await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: 90000 });
+        contentLoaded = true;
+      } catch (_) {
+        // Fallback: use data URL navigation
+        try {
+          const dataUrl = 'data:text/html;charset=UTF-8,' + encodeURIComponent(html);
+          await page.goto(dataUrl, { waitUntil: 'load', timeout: 90000 });
+          contentLoaded = true;
+        } catch (_) {}
+      }
 
-      const pdfBuffer = await page.pdf({
-        format: 'A4',
-        printBackground: true,
-        margin: {
-          top: '20mm',
-          right: '15mm',
-          bottom: '20mm',
-          left: '15mm'
-        }
-      });
+      // Ensure document is fully ready
+      if (contentLoaded) {
+        try { await page.waitForFunction('document.readyState === "complete"', { timeout: 90000 }); } catch (_) {}
+        try { await page.emulateMediaType('print'); } catch (_) {}
+        try { await page.evaluate(() => (window.document && document.fonts && document.fonts.ready) || Promise.resolve()); } catch (_) {}
+        // Double RAF to let layout fully settle
+        try { await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))); } catch (_) {}
+        // Small delay to let layout settle before printing
+        try { await page.waitForTimeout(200); } catch (_) {}
+      }
 
+      // Generate PDF with timeout
+      const pdfBuffer = await Promise.race([
+        page.pdf({
+          format: 'A4',
+          printBackground: true,
+          preferCSSPageSize: true,
+          margin: {
+            top: '20mm',
+            right: '15mm',
+            bottom: '20mm',
+            left: '15mm'
+          }
+        }),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('PDF generation timeout')), 90000)
+        )
+      ]);
+
+      // Close page first, then browser
+      await page.close();
       await browser.close();
+      
+      logger.success('PDF_SERVICE', 'PDF generated successfully');
       return pdfBuffer;
     } catch (error) {
-      if (browser) await browser.close();
-      logger.error('PDF_SERVICE', 'Failed to generate PDF', { error: error.message });
+      // Cleanup
+      try {
+        if (page) await page.close().catch(() => {});
+        if (browser) await browser.close().catch(() => {});
+      } catch (cleanupError) {
+        logger.error('PDF_SERVICE', 'Cleanup error', { error: cleanupError.message });
+      }
+
+      // Retry logic
+      if (retryCount < MAX_RETRIES && (
+        error.message.includes('Target closed') || 
+        error.message.includes('Protocol error') ||
+        error.message.includes('timeout')
+      )) {
+        logger.info('PDF_SERVICE', `Retry ${retryCount + 1}/${MAX_RETRIES}`, { error: error.message });
+        await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1))); // Exponential backoff
+        return this.generateAssessmentPDF(data, retryCount + 1);
+      }
+
+      logger.error('PDF_SERVICE', 'Failed to generate PDF after retries', { 
+        error: error.message,
+        retries: retryCount 
+      });
       throw error;
     }
   }
