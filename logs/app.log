@@ -6281,3 +6281,7 @@
 {"timestamp":"2026-04-08T12:08:52.759Z","level":"ERROR","category":"MEETING_INVITE","message":"Failed to send meeting invitation","details":{"candidateId":"5beefe53-b1b2-409d-923c-ee1f1761fb9c","error":"User-rate limit exceeded.  Retry after 2026-04-08T12:23:52.743Z"},"pid":2456469}
 {"timestamp":"2026-04-08T12:15:00.109Z","level":"INFO","category":"AUTOMATION_PROCESS","message":"Found 50 candidates to process","details":{},"pid":2456469}
 {"timestamp":"2026-04-08T12:15:00.110Z","level":"SUCCESS","category":"AUTOMATION_PROCESS","message":"Batch processing completed","details":{"processed":0,"skipped":50,"failed":0},"pid":2456469}
+{"timestamp":"2026-04-08T12:30:00.910Z","level":"INFO","category":"AUTOMATION_PROCESS","message":"Found 50 candidates to process","details":{},"pid":2456469}
+{"timestamp":"2026-04-08T12:30:01.004Z","level":"SUCCESS","category":"AUTOMATION_PROCESS","message":"Batch processing completed","details":{"processed":0,"skipped":50,"failed":0},"pid":2456469}
+{"timestamp":"2026-04-08T12:45:00.424Z","level":"INFO","category":"AUTOMATION_PROCESS","message":"Found 50 candidates to process","details":{},"pid":2456469}
+{"timestamp":"2026-04-08T12:45:00.425Z","level":"SUCCESS","category":"AUTOMATION_PROCESS","message":"Batch processing completed","details":{"processed":0,"skipped":50,"failed":0},"pid":2456469}
